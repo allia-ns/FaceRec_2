@@ -10,6 +10,7 @@ Original file is located at
 # -*- coding: utf-8 -*-
 
 import streamlit as st
+from PIL import Image
 
 # THIS MUST BE THE ABSOLUTE FIRST STREAMLIT COMMAND!
 st.set_page_config(
@@ -20,11 +21,9 @@ st.set_page_config(
     menu_items=None
 )
 
-
 # NOW import everything else AFTER set_page_config
 import os
 import numpy as np
-from PIL import Image
 import matplotlib.pyplot as plt
 import io
 import base64
