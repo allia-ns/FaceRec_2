@@ -10,20 +10,24 @@ Original file is located at
 # -*- coding: utf-8 -*-
 
 import streamlit as st
-from PIL import Image
-import os
-import numpy as np
-import matplotlib.pyplot as plt
 
 # THIS MUST BE THE ABSOLUTE FIRST STREAMLIT COMMAND!
 st.set_page_config(
-    page_title="🎭 Face Recognition System",
+    page_title="Face Recognition System",
     page_icon="🎭",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    menu_items=None
 )
 
+
 # NOW import everything else AFTER set_page_config
+import os
+import numpy as np
+from PIL import Image
+import matplotlib.pyplot as plt
+import io
+import base64
 
 
 # Import your face recognition module with error handling
