@@ -1,6 +1,5 @@
-# force safe Python version
-python_version == "3.10"
-
+streamlit==1.25.0
+python-dotenv
 streamlit
 numpy
 matplotlib
