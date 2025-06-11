@@ -9,538 +9,521 @@ Original file is located at
 
 # -*- coding: utf-8 -*-
 """
-Face Recognition using Eigenfaces (Manual Linear Algebra Implementation)
-Educational implementation with custom eigenvalue computation and PCA
+FaceRec.py - Sistem Pengenalan Wajah menggunakan Eigenface
+Implementasi custom eigenvalue/eigenvector dan euclidean distance
+Tugas Aljabar Linear - Universitas Sebelas Maret
 """
 
 import numpy as np
-import json
 import matplotlib.pyplot as plt
 import cv2
 import os
 from PIL import Image
+import json
 import zipfile
 import shutil
 
-class FaceRecognizer:
-    def __init__(self, image_size=(100, 100)):
-        """
-        Initialize Face Recognition System
+# ===== BAGIAN 1: FUNGSI UTILITAS DAN LOAD DATASET =====
 
-        Args:
-            image_size: Tuple of (width, height) for image resizing
-        """
-        self.image_size = image_size
-        self.X = None
-        self.y = None
-        self.mean_face = None
-        self.eigenfaces = None
-        self.projected_train = None
-        self.eigenvalues = None
+def extract_dataset_if_needed(zip_path, extract_to):
+    """
+    Ekstrak dataset zip jika folder belum ada
+    """
+    if not os.path.exists(extract_to) and os.path.exists(zip_path):
+        print(f"📦 Mengekstrak {zip_path}...")
 
-    def extract_dataset_if_needed(self, zip_path, extract_to):
-        """Extract dataset zip if folder doesn't exist"""
-        if not os.path.exists(extract_to) and os.path.exists(zip_path):
-            print(f"📦 Extracting {zip_path}...")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall('.')
 
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall('.')
+        # Cek struktur folder bersarang
+        extracted_items = os.listdir('.')
+        for item in extracted_items:
+            if os.path.isdir(item) and item == extract_to:
+                inner_path = os.path.join(item, extract_to)
+                if os.path.exists(inner_path):
+                    print(f"🔧 Memperbaiki struktur folder bersarang...")
+                    temp_folder = f"{extract_to}_temp"
+                    shutil.move(inner_path, temp_folder)
+                    shutil.rmtree(item)
+                    shutil.move(temp_folder, extract_to)
+                    print(f"✅ Struktur folder diperbaiki!")
+                    break
 
-            # Handle nested folder structure
-            extracted_items = os.listdir('.')
-            for item in extracted_items:
-                if os.path.isdir(item) and item == extract_to:
-                    inner_path = os.path.join(item, extract_to)
-                    if os.path.exists(inner_path):
-                        print(f"🔧 Fixing nested folder structure...")
-                        temp_folder = f"{extract_to}_temp"
-                        shutil.move(inner_path, temp_folder)
-                        shutil.rmtree(item)
-                        shutil.move(temp_folder, extract_to)
-                        print(f"✅ Fixed nested structure!")
-                        break
+        if os.path.exists(extract_to):
+            persons = os.listdir(extract_to)
+            print(f"📂 Ditemukan orang: {persons}")
+    elif os.path.exists(extract_to):
+        print(f"📁 Folder dataset sudah ada.")
+    else:
+        print(f"❌ Tidak ditemukan {zip_path} atau {extract_to}!")
 
-            if os.path.exists(extract_to):
-                persons = os.listdir(extract_to)
-                print(f"📂 Found persons: {persons}")
-        elif os.path.exists(extract_to):
-            print(f"📁 Dataset folder already exists.")
-        else:
-            print(f"❌ Neither {zip_path} nor {extract_to} found!")
+def load_images_from_folder(folder_path, image_size=(100, 100)):
+    """
+    Load gambar dari folder dan return dalam format matriks
+    """
+    images = []
+    labels = []
 
-    def load_dataset(self, folder_path):
-        """
-        Load images from dataset folder
+    # Cek folder, jika tidak ada coba ekstrak dari zip
+    zip_path = f"{folder_path}.zip"
+    extract_dataset_if_needed(zip_path, folder_path)
 
-        Args:
-            folder_path: Path to dataset folder
+    if not os.path.exists(folder_path):
+        print(f"❌ Folder dataset {folder_path} tidak ditemukan!")
+        return None, None
 
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        print(f"📥 Loading dataset from {folder_path}...")
+    persons = sorted(os.listdir(folder_path))
+    print(f"📁 Ditemukan {len(persons)} orang: {persons}")
 
-        # Try to extract from zip if needed
-        zip_path = f"{folder_path}.zip"
-        self.extract_dataset_if_needed(zip_path, folder_path)
+    for person in persons:
+        person_folder = os.path.join(folder_path, person)
+        if not os.path.isdir(person_folder):
+            continue
 
-        if not os.path.exists(folder_path):
-            print(f"❌ Dataset folder {folder_path} not found!")
-            return False
+        files = [f for f in os.listdir(person_folder) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+        print(f"👤 {person}: {len(files)} gambar")
 
-        images = []
-        labels = []
+        for filename in sorted(files):
+            img_path = os.path.join(person_folder, filename)
+            try:
+                img = Image.open(img_path).convert('L')  # Grayscale
+                img = img.resize(image_size)  # Resize
+                img_np = np.asarray(img, dtype=np.float32) / 255.0  # Normalisasi 0-1
+                images.append(img_np.flatten())  # Jadikan vektor 1D
+                labels.append(person)
 
-        persons = sorted(os.listdir(folder_path))
-        print(f"📁 Found {len(persons)} persons: {persons}")
-
-        for person in persons:
-            person_folder = os.path.join(folder_path, person)
-            if not os.path.isdir(person_folder):
+            except Exception as e:
+                print(f"⚠️ Error loading {img_path}: {e}")
                 continue
 
-            files = [f for f in os.listdir(person_folder)
-                    if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-            print(f"👤 {person}: {len(files)} images")
+    X = np.array(images).T  # Shape: (pixels, samples)
+    print(f"✅ Total dimuat: {len(labels)} gambar")
+    print(f"📊 Bentuk matriks: {X.shape}")
 
-            for filename in sorted(files):
-                img_path = os.path.join(person_folder, filename)
-                try:
-                    img = Image.open(img_path).convert('L')  # Grayscale
-                    img = img.resize(self.image_size)
-                    img_np = np.asarray(img, dtype=np.float32) / 255.0  # Normalize
-                    images.append(img_np.flatten())  # Make 1D vector
-                    labels.append(person)
-                except Exception as e:
-                    print(f"⚠️ Error loading {img_path}: {e}")
-                    continue
+    return X, labels
 
-        self.X = np.array(images).T  # Shape: (pixels, samples)
-        self.y = labels
+def show_image(vec, shape=(100, 100), title="Gambar"):
+    """
+    Tampilkan gambar dari vektor yang di-flatten
+    """
+    plt.figure(figsize=(4, 4))
+    plt.imshow(vec.reshape(shape), cmap='gray')
+    plt.title(title)
+    plt.axis('off')
+    plt.show()
 
-        print(f"✅ Dataset loaded: {len(labels)} images")
-        print(f"📊 Matrix shape: {self.X.shape}")
-        return True
+# ===== BAGIAN 2: IMPLEMENTASI CUSTOM EIGENVALUE/EIGENVECTOR =====
 
-    def power_iteration_optimized(self, A, max_iter=200, tol=1e-4):
-        """
-        Optimized power iteration for eigenvalue computation
-        Manual implementation for educational purposes
+def power_iteration_optimized(A, max_iter=200, tol=1e-4):
+    """
+    Power iteration yang dioptimasi untuk konvergensi lebih cepat
+    Implementasi sendiri tanpa menggunakan library numpy shortcuts
+    """
+    n = A.shape[0]
 
-        Args:
-            A: Matrix to find largest eigenvalue/eigenvector
-            max_iter: Maximum iterations
-            tol: Tolerance for convergence
+    # Inisialisasi yang lebih baik: gunakan baris dengan norm terbesar
+    row_norms = np.zeros(n)
+    for i in range(n):
+        for j in range(n):
+            row_norms[i] += A[i, j] ** 2
 
-        Returns:
-            tuple: (eigenvalue, eigenvector)
-        """
-        n = A.shape[0]
+    max_row = 0
+    max_norm = row_norms[0]
+    for i in range(1, n):
+        if row_norms[i] > max_norm:
+            max_norm = row_norms[i]
+            max_row = i
 
-        # Better initialization using dominant row
-        row_norms = np.zeros(n)
+    # Mulai dengan baris yang paling "penting"
+    b = A[max_row, :].copy()
+
+    # Normalisasi manual
+    norm = 0
+    for i in range(n):
+        norm += b[i] ** 2
+    norm = norm ** 0.5
+
+    if norm > 1e-10:
+        for i in range(n):
+            b[i] = b[i] / norm
+
+    prev_eigenvalue = 0
+
+    for iteration in range(max_iter):
+        # Perkalian matriks-vektor manual: A @ b
+        Ab = np.zeros(n)
         for i in range(n):
             for j in range(n):
-                row_norms[i] += A[i, j] ** 2
+                Ab[i] += A[i, j] * b[j]
 
-        max_row = np.argmax(row_norms)
-        b = A[max_row, :].copy()
+        # Hitung eigenvalue (Rayleigh quotient)
+        eigenvalue = 0
+        for i in range(n):
+            eigenvalue += b[i] * Ab[i]
 
-        # Normalize
-        norm = np.sqrt(np.sum(b ** 2))
+        # Normalisasi Ab
+        norm = 0
+        for i in range(n):
+            norm += Ab[i] ** 2
+        norm = norm ** 0.5
+
+        if norm < tol:
+            break
+
+        b_new = np.zeros(n)
+        for i in range(n):
+            b_new[i] = Ab[i] / norm
+
+        # Cek konvergensi berdasarkan perubahan eigenvalue
+        eigenvalue_change = abs(eigenvalue - prev_eigenvalue)
+        if eigenvalue_change < tol and iteration > 5:
+            break
+
+        b = b_new
+        prev_eigenvalue = eigenvalue
+
+    return eigenvalue, b
+
+def compute_top_eigenfaces(A, k=30):
+    """
+    Hitung eigenface teratas menggunakan implementasi custom
+    Menggunakan trik matriks kovarian kecil untuk efisiensi: C = A.T @ A
+    """
+    print(f"🧮 Menghitung {k} eigenface teratas...")
+
+    # Trik matriks kovarian kecil: C = A.T @ A
+    C_small = A.T @ A
+    print(f"📊 Bentuk matriks kovarian: {C_small.shape}")
+
+    eigenvalues = []
+    eigenvectors_small = []
+
+    # Buat salinan kerja
+    C_work = C_small.copy()
+
+    # Hitung trace asli untuk deflasi yang lebih baik
+    original_trace = 0
+    for i in range(C_work.shape[0]):
+        original_trace += C_work[i, i]
+
+    for i in range(min(k, C_small.shape[0])):
+        print(f"⚡ Menghitung eigenface {i+1}/{k}")
+
+        # Dapatkan eigenvalue/eigenvector terbesar
+        eigenval, eigenvec = power_iteration_optimized(C_work, max_iter=150, tol=1e-4)
+
+        # Hentikan lebih awal jika eigenvalue terlalu kecil
+        if eigenval < 1e-8:
+            print(f"🛑 Berhenti lebih awal - eigenvalue terlalu kecil: {eigenval:.2e}")
+            break
+
+        eigenvalues.append(eigenval)
+        eigenvectors_small.append(eigenvec.copy())
+
+        # Deflasi yang lebih baik dengan pengecekan stabilitas
+        # C_new = C - eigenval * eigenvec @ eigenvec.T
+        outer_product = np.zeros((C_work.shape[0], C_work.shape[1]))
+        for row in range(C_work.shape[0]):
+            for col in range(C_work.shape[1]):
+                outer_product[row, col] = eigenvec[row] * eigenvec[col]
+
+        # Deflasi dengan faktor skala untuk menjaga stabilitas
+        deflation_scale = min(1.0, eigenval / (original_trace / C_work.shape[0]))
+
+        for row in range(C_work.shape[0]):
+            for col in range(C_work.shape[1]):
+                C_work[row, col] -= deflation_scale * eigenval * outer_product[row, col]
+
+        # Cek trace yang tersisa
+        remaining_trace = 0
+        for j in range(C_work.shape[0]):
+            remaining_trace += C_work[j, j]
+
+        if remaining_trace < 1e-6:
+            print(f"🛑 Berhenti lebih awal - matriks habis setelah {i+1} eigenface")
+            break
+
+        # Info progres
+        if i < 5 or i % 5 == 4:
+            print(f"   → Eigenvalue: {eigenval:.2e}, Trace tersisa: {remaining_trace:.2e}")
+
+    # Konversi ke numpy arrays
+    eigenvalues = np.array(eigenvalues)
+    eigenvectors_small = np.array(eigenvectors_small).T
+
+    # Konversi ke eigenface sebenarnya: U = A @ eigenvectors_small
+    eigenfaces = A @ eigenvectors_small
+
+    # Normalisasi eigenface (lebih efisien)
+    for i in range(eigenfaces.shape[1]):
+        norm = 0
+        for j in range(eigenfaces.shape[0]):
+            norm += eigenfaces[j, i] ** 2
+        norm = norm ** 0.5
+
         if norm > 1e-10:
-            b = b / norm
+            for j in range(eigenfaces.shape[0]):
+                eigenfaces[j, i] /= norm
 
-        prev_eigenvalue = 0
+    print(f"✅ Berhasil menghitung {len(eigenvalues)} eigenface")
+    return eigenfaces, eigenvalues
 
-        for iteration in range(max_iter):
-            # Matrix-vector multiplication: A @ b
-            Ab = np.zeros(n)
-            for i in range(n):
-                for j in range(n):
-                    Ab[i] += A[i, j] * b[j]
+# ===== BAGIAN 3: IMPLEMENTASI CUSTOM EUCLIDEAN DISTANCE =====
 
-            # Calculate eigenvalue (Rayleigh quotient)
-            eigenvalue = np.sum(b * Ab)
+def euclidean_distance(vec1, vec2):
+    """
+    Implementasi custom euclidean distance dengan perhitungan manual!
+    """
+    if len(vec1) != len(vec2):
+        raise ValueError("Vektor harus memiliki panjang yang sama")
 
-            # Normalize Ab
-            norm = np.sqrt(np.sum(Ab ** 2))
-            if norm < tol:
-                break
+    distance = 0
+    for i in range(len(vec1)):
+        diff = vec1[i] - vec2[i]
+        distance += diff * diff
 
-            b_new = Ab / norm
+    return distance ** 0.5
 
-            # Check convergence
-            eigenvalue_change = abs(eigenvalue - prev_eigenvalue)
-            if eigenvalue_change < tol and iteration > 5:
-                break
+# ===== BAGIAN 4: FASE TRAINING =====
 
-            b = b_new
-            prev_eigenvalue = eigenvalue
+def train_eigenface_model(dataset_path, k_eigenfaces=25):
+    """
+    Training model eigenface
+    Returns: mean_face, eigenfaces, projected_train, eigenvalues, X, labels
+    """
+    print("🚀 Memulai training...")
 
-        return eigenvalue, b
+    # Load dataset
+    X, labels = load_images_from_folder(dataset_path)
+    if X is None:
+        return None, None, None, None, None, None
 
-    def compute_eigenfaces(self, k=25):
-        """
-        Compute eigenfaces using manual eigenvalue decomposition
+    # Langkah 1: Hitung mean face
+    print("📊 Menghitung mean face...")
+    mean_face = np.mean(X, axis=1, keepdims=True)
 
-        Args:
-            k: Number of eigenfaces to compute
+    # Langkah 2: Center data (kurangi mean)
+    print("🎯 Centering data...")
+    A = X - mean_face
 
-        Returns:
-            tuple: (eigenfaces, eigenvalues)
-        """
-        print(f"🧮 Computing top {k} eigenfaces...")
+    # Langkah 3: Hitung eigenface
+    eigenfaces, eigenvalues = compute_top_eigenfaces(A, k=k_eigenfaces)
 
-        # Use covariance trick: C = A.T @ A (smaller matrix)
-        A = self.X - self.mean_face
-        C_small = A.T @ A
-        print(f"📊 Covariance matrix shape: {C_small.shape}")
+    # Langkah 4: Proyeksikan data training ke ruang eigenface
+    print("🎲 Memproyeksikan data training...")
+    projected_train = eigenfaces.T @ A
 
-        eigenvalues = []
-        eigenvectors_small = []
+    print("✅ Training selesai!")
+    print(f"📊 Menggunakan {eigenfaces.shape[1]} eigenface")
+    print(f"📊 Bentuk data training di eigenspace: {projected_train.shape}")
 
-        # Working copy for deflation
-        C_work = C_small.copy()
-        original_trace = np.trace(C_work)
+    return mean_face, eigenfaces, projected_train, eigenvalues, X, labels
 
-        for i in range(min(k, C_small.shape[0])):
-            print(f"⚡ Computing eigenface {i+1}/{k}")
+# ===== BAGIAN 5: FASE TESTING/RECOGNITION =====
 
-            # Get largest eigenvalue/eigenvector
-            eigenval, eigenvec = self.power_iteration_optimized(C_work, max_iter=150)
+def recognize_face(test_image_path, mean_face, eigenfaces, projected_train, X, labels, threshold=15.0, show_plots=True):
+    """
+    Kenali wajah dari gambar test
+    """
+    print(f"🔍 Mengenali wajah: {test_image_path}")
 
-            # Early stopping if eigenvalue too small
-            if eigenval < 1e-8:
-                print(f"🛑 Stopping early - eigenvalue too small: {eigenval:.2e}")
-                break
+    # Load dan preprocess gambar test
+    try:
+        img = Image.open(test_image_path).convert('L')
+        img = img.resize((100, 100))
+        img_np = np.asarray(img, dtype=np.float32) / 255.0
+        img_vec = img_np.flatten().reshape(-1, 1)
 
-            eigenvalues.append(eigenval)
-            eigenvectors_small.append(eigenvec.copy())
+        if show_plots:
+            show_image(img_vec.flatten(), title="Gambar Test")
 
-            # Deflation: C_new = C - eigenval * eigenvec @ eigenvec.T
-            outer_product = np.outer(eigenvec, eigenvec)
-            deflation_scale = min(1.0, eigenval / (original_trace / C_work.shape[0]))
-            C_work -= deflation_scale * eigenval * outer_product
+    except Exception as e:
+        print(f"❌ Error loading gambar test: {e}")
+        return None, None, None
 
-            # Check if we should continue
-            remaining_trace = np.trace(C_work)
-            if remaining_trace < 1e-6:
-                print(f"🛑 Stopping early - matrix exhausted after {i+1} eigenfaces")
-                break
+    # Preprocess: center gambar
+    img_centered = img_vec - mean_face
 
-            if i < 5 or i % 5 == 4:
-                print(f"   → Eigenvalue: {eigenval:.2e}, Remaining trace: {remaining_trace:.2e}")
+    # Proyeksi ke ruang eigenface
+    img_projected = eigenfaces.T @ img_centered
+    img_projected = img_projected.flatten()
 
-        # Convert to numpy arrays
-        eigenvalues = np.array(eigenvalues)
-        eigenvectors_small = np.array(eigenvectors_small).T
+    # Cari kecocokan terdekat
+    min_distance = float('inf')
+    best_match_idx = -1
+    distances = []
 
-        # Convert to actual eigenfaces: U = A @ eigenvectors_small
-        eigenfaces = A @ eigenvectors_small
+    for i in range(projected_train.shape[1]):
+        train_proj = projected_train[:, i]
+        distance = euclidean_distance(img_projected, train_proj)
+        distances.append(distance)
 
-        # Normalize eigenfaces
-        for i in range(eigenfaces.shape[1]):
-            norm = np.linalg.norm(eigenfaces[:, i])
-            if norm > 1e-10:
-                eigenfaces[:, i] /= norm
+        if distance < min_distance:
+            min_distance = distance
+            best_match_idx = i
 
-        print(f"✅ Computed {len(eigenvalues)} eigenfaces")
-        return eigenfaces, eigenvalues
+    # Dapatkan top 3 kecocokan
+    distance_pairs = [(distances[i], labels[i], i) for i in range(len(distances))]
+    distance_pairs.sort(key=lambda x: x[0])
+    top_3 = distance_pairs[:3]
 
-    def train(self, dataset_path, k=25):
-        """
-        Train the face recognition system
+    # Analisis hasil
+    print(f"🎯 Hasil:")
+    print(f"→ Jarak minimum: {min_distance:.2f}")
+    print(f"→ Jarak rata-rata: {np.mean(distances):.2f}")
+    print(f"→ Threshold: {threshold:.2f}")
 
-        Args:
-            dataset_path: Path to dataset folder
-            k: Number of eigenfaces to use
+    print(f"\n🏆 Top 3 kecocokan:")
+    for i, (dist, label, idx) in enumerate(top_3):
+        print(f"  {i+1}. {label} (jarak: {dist:.2f})")
 
-        Returns:
-            bool: True if training successful
-        """
-        print("🚀 Starting training...")
-
-        # Load dataset
-        if not self.load_dataset(dataset_path):
-            return False
-
-        # Compute mean face
-        print("📊 Computing mean face...")
-        self.mean_face = np.mean(self.X, axis=1, keepdims=True)
-
-        # Compute eigenfaces
-        self.eigenfaces, self.eigenvalues = self.compute_eigenfaces(k)
-
-        # Project training data to eigenface space
-        print("🎲 Projecting training data...")
-        A = self.X - self.mean_face
-        self.projected_train = self.eigenfaces.T @ A
-
-        print("✅ Training complete!")
-        print(f"📊 Using {self.eigenfaces.shape[1]} eigenfaces")
-        print(f"📊 Training data shape in eigenspace: {self.projected_train.shape}")
-
-        return True
-
-    def euclidean_distance(self, vec1, vec2):
-        """
-        Custom euclidean distance calculation (manual implementation)
-
-        Args:
-            vec1, vec2: Input vectors
-
-        Returns:
-            float: Euclidean distance
-        """
-        if len(vec1) != len(vec2):
-            raise ValueError("Vectors must have same length")
-
-        distance = 0
-        for i in range(len(vec1)):
-            diff = vec1[i] - vec2[i]
-            distance += diff * diff
-
-        return distance ** 0.5
-
-    def recognize(self, test_image_path, threshold=15.0, show_results=True):
-        """
-        Recognize face from test image
-
-        Args:
-            test_image_path: Path to test image
-            threshold: Distance threshold for recognition
-            show_results: Whether to display results
-
-        Returns:
-            tuple: (recognized_person, distance, top_matches)
-        """
-        if self.eigenfaces is None:
-            print("❌ Model not trained yet! Call train() first.")
-            return None, None, None
-
-        print(f"🔍 Recognizing face: {test_image_path}")
-
-        # Load and preprocess test image
-        try:
-            img = Image.open(test_image_path).convert('L')
-            img = img.resize(self.image_size)
-            img_np = np.asarray(img, dtype=np.float32) / 255.0
-            img_vec = img_np.flatten().reshape(-1, 1)
-
-            if show_results:
-                self.show_image(img_vec.flatten(), title="Test Image")
-
-        except Exception as e:
-            print(f"❌ Error loading test image: {e}")
-            return None, None, None
-
-        # Preprocess: center the image
-        img_centered = img_vec - self.mean_face
-
-        # Project to eigenface space
-        img_projected = self.eigenfaces.T @ img_centered
-        img_projected = img_projected.flatten()
-
-        # Find closest match
-        min_distance = float('inf')
-        best_match_idx = -1
-        distances = []
-
-        for i in range(self.projected_train.shape[1]):
-            train_proj = self.projected_train[:, i]
-            distance = self.euclidean_distance(img_projected, train_proj)
-            distances.append(distance)
-
-            if distance < min_distance:
-                min_distance = distance
-                best_match_idx = i
-
-        # Get top 3 matches
-        distance_pairs = [(distances[i], self.y[i], i) for i in range(len(distances))]
-        distance_pairs.sort(key=lambda x: x[0])
-        top_3 = distance_pairs[:3]
-
-        # Display results
-        if show_results:
-            print(f"🎯 Results:")
-            print(f"→ Min distance: {min_distance:.2f}")
-            print(f"→ Mean distance: {np.mean(distances):.2f}")
-            print(f"→ Threshold: {threshold:.2f}")
-
-            print(f"\n🏆 Top 3 matches:")
-            for i, (dist, label, idx) in enumerate(top_3):
-                print(f"  {i+1}. {label} (distance: {dist:.2f})")
-
-            # Plot distance distribution
-            plt.figure(figsize=(10, 4))
-            plt.hist(distances, bins=20, alpha=0.7, color='blue')
-            plt.axvline(x=min_distance, color='red', linestyle='--',
-                       label=f'Best match: {min_distance:.2f}')
-            plt.axvline(x=threshold, color='orange', linestyle='--',
-                       label=f'Threshold: {threshold:.2f}')
-            plt.xlabel('Euclidean Distance')
-            plt.ylabel('Frequency')
-            plt.title('Distance Distribution')
-            plt.legend()
-            plt.grid(True)
-            plt.show()
-
-        # Decision
-        if min_distance <= threshold:
-            result = self.y[best_match_idx]
-            if show_results:
-                print(f"✅ MATCH FOUND: {result}")
-                self.show_image(self.X[:, best_match_idx], title=f"Matched: {result}")
-            return result, min_distance, top_3
-        else:
-            if show_results:
-                print(f"❌ NO MATCH FOUND (distance > threshold)")
-            return None, min_distance, top_3
-
-    def show_image(self, vec, title="Image"):
-        """Display image from flattened vector"""
-        plt.figure(figsize=(4, 4))
-        plt.imshow(vec.reshape(self.image_size), cmap='gray')
-        plt.title(title)
-        plt.axis('off')
-        plt.show()
-
-    def visualize_results(self):
-        """Visualize training results"""
-        if self.mean_face is None or self.eigenfaces is None:
-            print("❌ No results to visualize. Train the model first!")
-            return
-
-        # Show mean face
-        self.show_image(self.mean_face.flatten(), title="Mean Face")
-
-        # Show eigenfaces
-        fig, axes = plt.subplots(2, 3, figsize=(12, 8))
-        axes = axes.flatten()
-
-        for i in range(6):
-            if i < self.eigenfaces.shape[1]:
-                eigenface = self.eigenfaces[:, i]
-                # Normalize for display
-                eigenface_display = (eigenface - eigenface.min()) / (eigenface.max() - eigenface.min())
-                axes[i].imshow(eigenface_display.reshape(self.image_size), cmap='gray')
-                axes[i].set_title(f'Eigenface {i+1}')
-                axes[i].axis('off')
-            else:
-                axes[i].axis('off')
-
-        plt.tight_layout()
-        plt.show()
-
-        # Show eigenvalue distribution
+    # Plot distribusi jarak
+    if show_plots:
         plt.figure(figsize=(10, 4))
-        plt.plot(self.eigenvalues, 'bo-')
-        plt.title('Eigenvalues Distribution')
-        plt.xlabel('Eigenface Index')
-        plt.ylabel('Eigenvalue')
+        plt.hist(distances, bins=20, alpha=0.7, color='blue')
+        plt.axvline(x=min_distance, color='red', linestyle='--',
+                    label=f'Kecocokan terbaik: {min_distance:.2f}')
+        plt.axvline(x=threshold, color='orange', linestyle='--',
+                    label=f'Threshold: {threshold:.2f}')
+        plt.xlabel('Jarak Euclidean')
+        plt.ylabel('Frekuensi')
+        plt.title('Distribusi Jarak')
+        plt.legend()
         plt.grid(True)
         plt.show()
 
-    def save_model(self, save_path='saved_models'):
-        """Save trained model"""
-        if self.X is None:
-            print("❌ No model to save. Train first!")
-            return False
+    # Keputusan
+    if min_distance <= threshold:
+        result = labels[best_match_idx]
+        print(f"✅ KECOCOKAN DITEMUKAN: {result}")
+        if show_plots:
+            show_image(X[:, best_match_idx], title=f"Cocok: {result}")
+        return result, min_distance, top_3
+    else:
+        print(f"❌ TIDAK ADA KECOCOKAN (jarak > threshold)")
+        return None, min_distance, top_3
 
-        print("💾 Saving model...")
-        os.makedirs(save_path, exist_ok=True)
+# ===== BAGIAN 6: SAVE/LOAD MODEL =====
 
-        # Save numpy arrays
-        np.save(f'{save_path}/X.npy', self.X)
-        np.save(f'{save_path}/mean_face.npy', self.mean_face)
-        np.save(f'{save_path}/eigenfaces.npy', self.eigenfaces)
-        np.save(f'{save_path}/projected_train.npy', self.projected_train)
-        np.save(f'{save_path}/eigenvalues.npy', self.eigenvalues)
+def save_model(mean_face, eigenfaces, projected_train, eigenvalues, X, labels, save_path='saved_models'):
+    """
+    Simpan model yang sudah ditraining
+    """
+    print("💾 Menyimpan model...")
 
-        # Save labels and image size
-        with open(f'{save_path}/labels.json', 'w') as f:
-            json.dump(self.y, f)
+    os.makedirs(save_path, exist_ok=True)
 
-        with open(f'{save_path}/config.json', 'w') as f:
-            json.dump({'image_size': self.image_size}, f)
+    # Simpan numpy arrays
+    np.save(f'{save_path}/X.npy', X)
+    np.save(f'{save_path}/mean_face.npy', mean_face)
+    np.save(f'{save_path}/eigenfaces.npy', eigenfaces)
+    np.save(f'{save_path}/projected_train.npy', projected_train)
+    np.save(f'{save_path}/eigenvalues.npy', eigenvalues)
 
-        print("✅ Model saved successfully!")
-        return True
+    # Simpan labels
+    with open(f'{save_path}/labels.json', 'w') as f:
+        json.dump(labels, f)
 
-    def load_model(self, model_path='saved_models'):
-        """Load pre-trained model"""
-        print("📥 Loading pre-trained model...")
+    print("✅ Model berhasil disimpan!")
 
-        try:
-            # Load arrays
-            self.X = np.load(f'{model_path}/X.npy')
-            self.mean_face = np.load(f'{model_path}/mean_face.npy')
-            self.eigenfaces = np.load(f'{model_path}/eigenfaces.npy')
-            self.projected_train = np.load(f'{model_path}/projected_train.npy')
-            self.eigenvalues = np.load(f'{model_path}/eigenvalues.npy')
+def load_model(model_path='saved_models'):
+    """
+    Load model yang sudah ditraining - TANPA PERLU TRAINING ULANG!
+    """
+    print("📥 Loading model yang sudah ditraining...")
 
-            # Load labels
-            with open(f'{model_path}/labels.json', 'r') as f:
-                self.y = json.load(f)
+    try:
+        # Load semua array yang disimpan
+        X = np.load(f'{model_path}/X.npy')
+        mean_face = np.load(f'{model_path}/mean_face.npy')
+        eigenfaces = np.load(f'{model_path}/eigenfaces.npy')
+        projected_train = np.load(f'{model_path}/projected_train.npy')
+        eigenvalues = np.load(f'{model_path}/eigenvalues.npy')
 
-            # Load config
-            with open(f'{model_path}/config.json', 'r') as f:
-                config = json.load(f)
-                self.image_size = tuple(config['image_size'])
+        # Load labels
+        with open(f'{model_path}/labels.json', 'r') as f:
+            labels = json.load(f)
 
-            print("✅ Model loaded successfully!")
-            print(f"📊 Training data: {self.X.shape}")
-            print(f"📊 Eigenfaces: {self.eigenfaces.shape}")
-            print(f"📊 People: {len(set(self.y))}")
+        print("✅ Model berhasil dimuat!")
+        print(f"📊 Data training: {X.shape}")
+        print(f"📊 Eigenface: {eigenfaces.shape}")
+        print(f"📊 Jumlah orang: {len(set(labels))}")
 
-            return True
+        return mean_face, eigenfaces, projected_train, eigenvalues, X, labels
 
-        except Exception as e:
-            print(f"❌ Error loading model: {e}")
-            return False
+    except Exception as e:
+        print(f"❌ Error loading model: {e}")
+        print("💡 Pastikan sudah menjalankan training dan menyimpan model!")
+        return None, None, None, None, None, None
 
+# ===== BAGIAN 7: FUNGSI UTAMA UNTUK TESTING =====
 
-# =============================================================================
-# USAGE EXAMPLE
-# =============================================================================
+def quick_recognize(test_image_path, mean_face, eigenfaces, projected_train, X, labels, threshold=15.0):
+    """
+    Pengenalan wajah cepat menggunakan model yang sudah dimuat
+    """
+    return recognize_face(test_image_path, mean_face, eigenfaces, projected_train, X, labels, threshold, show_plots=False)
+
+def visualize_results(mean_face, eigenfaces, eigenvalues):
+    """
+    Visualisasi hasil training
+    """
+    # Tampilkan mean face
+    show_image(mean_face.flatten(), title="Mean Face")
+
+    # Tampilkan beberapa eigenface
+    fig, axes = plt.subplots(2, 3, figsize=(12, 8))
+    axes = axes.flatten()
+
+    for i in range(6):
+        if i < eigenfaces.shape[1]:
+            eigenface = eigenfaces[:, i]
+            # Normalisasi untuk display
+            eigenface_display = (eigenface - eigenface.min()) / (eigenface.max() - eigenface.min())
+            axes[i].imshow(eigenface_display.reshape(100, 100), cmap='gray')
+            axes[i].set_title(f'Eigenface {i+1}')
+            axes[i].axis('off')
+        else:
+            axes[i].axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+    # Tampilkan distribusi eigenvalue
+    plt.figure(figsize=(10, 4))
+    plt.plot(eigenvalues, 'bo-')
+    plt.title('Distribusi Eigenvalue')
+    plt.xlabel('Index Eigenface')
+    plt.ylabel('Eigenvalue')
+    plt.grid(True)
+    plt.show()
+
+# ===== CONTOH PENGGUNAAN =====
 
 if __name__ == "__main__":
-    # Initialize face recognizer
-    face_rec = FaceRecognizer(image_size=(100, 100))
+    # Contoh penggunaan lengkap
 
-    # Option 1: Train new model
-    print("=== TRAINING MODE ===")
-    if face_rec.train('dataset_subset', k=25):
-        # Visualize results
-        face_rec.visualize_results()
+    # 1. Training (jalankan sekali saja)
+    # mean_face, eigenfaces, projected_train, eigenvalues, X, labels = train_eigenface_model('dataset_subset', k_eigenfaces=25)
+    # save_model(mean_face, eigenfaces, projected_train, eigenvalues, X, labels)
 
-        # Save the model
-        face_rec.save_model()
+    # 2. Load model yang sudah ditraining (untuk penggunaan selanjutnya)
+    mean_face, eigenfaces, projected_train, eigenvalues, X, labels = load_model()
 
-        # Test recognition
-        test_image = "test_img/ellen2_test.jpg"  # Change this path
-        result, distance, top_matches = face_rec.recognize(test_image, threshold=18.0)
+    if mean_face is not None:
+        print("\n🎉 Model berhasil dimuat! Siap untuk testing!")
 
-        if result:
-            print(f"\n🎉 Recognition successful!")
-            print(f"👤 Identified as: {result}")
-            print(f"📏 Distance: {distance:.2f}")
-        else:
-            print(f"\n😞 No match found")
+        # Visualisasi hasil
+        # visualize_results(mean_face, eigenfaces, eigenvalues)
 
-    # Option 2: Load existing model (comment out training above)
-    """
-    print("=== LOADING MODE ===")
-    if face_rec.load_model():
-        # Test with loaded model
-        test_image = "test_img/ellen2_test.jpg"  # Change this path
-        result, distance, top_matches = face_rec.recognize(test_image, threshold=18.0)
+        # Test dengan gambar
+        test_image = "test_img/sample_test.jpg"  # Ganti dengan path gambar test
+        result, distance, top_matches = recognize_face(test_image, mean_face, eigenfaces, projected_train, X, labels)
 
         if result:
-            print(f"\n👤 Identified as: {result}")
+            print(f"\n👤 Teridentifikasi sebagai: {result}")
+            print(f"📏 Jarak: {distance:.2f}")
         else:
-            print(f"\n😞 No match found")
-    """
-
-    print("\n🎉 Face Recognition System Ready!")
+            print(f"\n😞 Tidak ada kecocokan ditemukan")
+    else:
+        print("❌ Gagal memuat model. Jalankan training terlebih dahulu!")
