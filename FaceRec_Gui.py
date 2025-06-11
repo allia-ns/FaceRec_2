@@ -184,7 +184,7 @@ def main():
             "Pilih gambar untuk diuji...",
             type=['jpg', 'jpeg', 'png'],
             accept_multiple_files=False,
-            help="Upload gambar wajah yang ingin dikenali"
+            help="Upload gambar yang ingin diuji"
         )
 
         # ===== OPSI 2: PILIH DARI FOLDER TEST =====
@@ -381,33 +381,6 @@ def main():
 
             except Exception as e:
                 st.error(f"❌ Error menyimpan file upload: {e}")
-
-    # ===== FOOTER AKADEMIK =====
-    st.markdown("---")
-    st.markdown("### 🎓 Tentang Sistem")
-    
-    col_footer1, col_footer2 = st.columns([1, 1])
-    
-    with col_footer1:
-        st.markdown("""
-        **🔬 Implementasi Teknis:**
-        - Custom eigenvalue/eigenvector calculation
-        - Power iteration algorithm
-        - Manual euclidean distance
-        - Eigenface projection method
-        """)
-    
-    with col_footer2:
-        st.markdown("""
-        **📚 Informasi Akademik:**
-        - Mata Kuliah: Aljabar Linear
-        - Universitas Sebelas Maret
-        - Program Studi: Teknik Informatika
-        - Topik: Face Recognition with Eigenfaces
-        """)
-
-    st.markdown("---")
-    st.caption("💡 Sistem ini menggunakan implementasi custom tanpa library shortcuts untuk tujuan pembelajaran aljabar linear")
 
 # ===== ENTRY POINT APLIKASI =====
 if __name__ == "__main__":
