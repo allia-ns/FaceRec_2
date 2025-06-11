@@ -4,7 +4,7 @@ Implementasi sistem pengenalan wajah menggunakan metode eigenface dengan perhitu
 
 ## Demo Online
 
-**Akses aplikasi:** [https://facerec2-eigenfrhbxpudmdhpcdxr6xx3ez.streamlit.app/](https://facerec2-eigenfrhbxpudmdhpcdxr6xx3ez.streamlit.app/)
+**Akses aplikasi:** [https://facerec-eigen.streamlit.app/](https://facerec2-eigenfrhbxpudmdhpcdxr6xx3ez.streamlit.app/)
 
 ## Fitur 
 
