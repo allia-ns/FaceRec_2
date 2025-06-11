@@ -7,16 +7,9 @@ Original file is located at
     https://colab.research.google.com/drive/161qDTvXtbsxSod2WIIXgLczJBSDCXIQI
 """
 
-# -*- coding: utf-8 -*-
-"""
-FaceRec_GUI_Streamlit.py
-Face Recognition GUI using Streamlit - Glass Purple Theme
-Compatible with Google Colab and local environments
-"""
-
 import streamlit as st
 
-# Configure page
+# THIS MUST BE THE ABSOLUTE FIRST STREAMLIT COMMAND!
 st.set_page_config(
     page_title="🎭 Face Recognition System",
     page_icon="🎭",
@@ -24,433 +17,262 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-import os
+# NOW import everything else AFTER set_page_config
 import numpy as np
-from PIL import Image
 import matplotlib.pyplot as plt
-import io
-import base64
+from PIL import Image
+import os
 
-# Import your face recognition functions
+# Import your face recognition module
 try:
     from FaceRec import load_model, recognize_face, quick_recognize
-    st.success("✅ FaceRec module imported successfully!")
+    st.success("✅ FaceRec module loaded successfully!")
 except ImportError as e:
     st.error(f"❌ Error importing FaceRec: {e}")
-    st.error("💡 Make sure FaceRec.py is in the same directory!")
-
-# Custom CSS for glass purple theme
-def load_css():
-    st.markdown("""
-    <style>
-    .main {
-        background: linear-gradient(135deg, #1a0d2e 0%, #2d1b3d 100%);
-    }
-
-    .stApp {
-        background: linear-gradient(135deg, #1a0d2e 0%, #2d1b3d 100%);
-    }
-
-    .glass-panel {
-        background: rgba(45, 27, 61, 0.8);
-        backdrop-filter: blur(10px);
-        border-radius: 15px;
-        border: 1px solid rgba(139, 90, 150, 0.3);
-        padding: 20px;
-        margin: 10px 0;
-    }
-
-    .title-text {
-        color: #e6d7ff;
-        text-align: center;
-        font-size: 2.5rem;
-        font-weight: bold;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        margin-bottom: 10px;
-    }
-
-    .subtitle-text {
-        color: #8b5a96;
-        text-align: center;
-        font-size: 1.2rem;
-        font-style: italic;
-        margin-bottom: 30px;
-    }
-
-    .result-box {
-        background: rgba(26, 13, 46, 0.9);
-        color: #e6d7ff;
-        padding: 15px;
-        border-radius: 10px;
-        border: 1px solid #8b5a96;
-        margin: 10px 0;
-    }
-
-    .success-box {
-        background: rgba(76, 175, 80, 0.2);
-        color: #4caf50;
-        padding: 15px;
-        border-radius: 10px;
-        border: 1px solid #4caf50;
-        margin: 10px 0;
-    }
-
-    .error-box {
-        background: rgba(244, 67, 54, 0.2);
-        color: #f44336;
-        padding: 15px;
-        border-radius: 10px;
-        border: 1px solid #f44336;
-        margin: 10px 0;
-    }
-
-    .metric-card {
-        background: rgba(45, 27, 61, 0.8);
-        padding: 15px;
-        border-radius: 10px;
-        border: 1px solid rgba(139, 90, 150, 0.5);
-        text-align: center;
-    }
-
-    .stButton button {
-        background: linear-gradient(45deg, #6b4c7a, #8b5a96);
-        color: white;
-        border: none;
-        border-radius: 10px;
-        padding: 10px 20px;
-        font-weight: bold;
-        transition: all 0.3s ease;
-    }
-
-    .stButton button:hover {
-        background: linear-gradient(45deg, #8b5a96, #a067ab);
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(139, 90, 150, 0.4);
-    }
-
-    .sidebar .sidebar-content {
-        background: rgba(45, 27, 61, 0.9);
-    }
-
-    .uploadedFile {
-        background: rgba(45, 27, 61, 0.8);
-        border-radius: 10px;
-        border: 1px solid rgba(139, 90, 150, 0.3);
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-def display_header():
-    """Display the main header"""
-    st.markdown('<div class="title-text">🎭 FACE RECOGNITION SYSTEM</div>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle-text">Eigenfaces & Linear Algebra Project</div>', unsafe_allow_html=True)
-    st.markdown("---")
-
-def display_disclaimer():
-    """Display disclaimer about the system"""
-    with st.expander("⚠️ System Information & Disclaimer", expanded=False):
-        st.markdown("""
-        **🎯 Dataset Information:**
-        - Barack Obama, Ellen Page, Tom Holland, Chris Evans, Bill Gates
-        - Ben Affleck, Avril Lavigne, Rihanna, Taylor Swift, Lionel Messi
-
-        **⚡ How it works:**
-        - Uses Eigenface method with custom Linear Algebra implementation
-        - Custom eigenvalue/eigenvector calculation (no library shortcuts)
-        - Custom Euclidean distance calculation
-
-        **📸 For best results:**
-        - Use clear face images facing the camera
-        - Good lighting and contrast
-        - Single person in the image
-        """)
-
-def load_and_cache_model():
-    """Load model with caching"""
-    if 'model_loaded' not in st.session_state:
-        st.session_state.model_loaded = False
-        st.session_state.model_data = None
-
-    if not st.session_state.model_loaded:
-        with st.spinner("📥 Loading trained model..."):
-            try:
-                # Try to load model
-                model_data = load_model('saved_models')
-
-                if model_data[0] is not None:  # mean_face is not None
-                    st.session_state.model_data = model_data
-                    st.session_state.model_loaded = True
-
-                    # Get model info
-                    mean_face, eigenfaces, projected_train, eigenvalues, X, labels = model_data
-                    unique_people = len(set(labels))
-
-                    st.success("✅ Model loaded successfully!")
-
-                    # Display model info in sidebar
-                    st.sidebar.markdown("### 📊 Model Information")
-                    st.sidebar.metric("Training Images", X.shape[1])
-                    st.sidebar.metric("People in Dataset", unique_people)
-                    st.sidebar.metric("Eigenfaces", eigenfaces.shape[1])
-                    st.sidebar.metric("Image Dimensions", f"{int(np.sqrt(X.shape[0]))}×{int(np.sqrt(X.shape[0]))}")
-
-                    return True
-                else:
-                    st.error("❌ Failed to load model!")
-                    st.error("💡 Make sure 'saved_models' folder exists and contains trained model files")
-                    return False
-
-            except Exception as e:
-                st.error(f"❌ Error loading model: {str(e)}")
-                st.error("💡 Make sure you have run the training phase first!")
-                return False
-
-    return st.session_state.model_loaded
-
-def display_test_image(uploaded_file):
-    """Display uploaded test image"""
-    if uploaded_file is not None:
-        # Display image
-        image = Image.open(uploaded_file)
-
-        # Create two columns for better layout
-        col1, col2 = st.columns([1, 2])
-
-        with col1:
-            st.markdown("### 📸 Test Image")
-            st.image(image, caption=f"📁 {uploaded_file.name}", use_column_width=True)
-
-            # Image info
-            st.markdown(f"""
-            <div class="result-box">
-            <strong>📋 Image Info:</strong><br>
-            • Size: {image.size}<br>
-            • Mode: {image.mode}<br>
-            • Format: {uploaded_file.type}
-            </div>
-            """, unsafe_allow_html=True)
-
-        return col2
-    return None
-
-def perform_recognition(uploaded_file, threshold=15.0):
-    """Perform face recognition"""
-    if not st.session_state.model_loaded:
-        st.error("❌ Please load the model first!")
-        return
-
-    if uploaded_file is None:
-        st.warning("⚠️ Please upload a test image first!")
-        return
-
-    # Save uploaded file temporarily
-    with open("temp_test_image.jpg", "wb") as f:
-        f.write(uploaded_file.getbuffer())
-
-    try:
-        with st.spinner("🔍 Analyzing face..."):
-            # Get model data
-            mean_face, eigenfaces, projected_train, eigenvalues, X, labels = st.session_state.model_data
-
-            # Perform recognition
-            result, distance, top_matches = recognize_face(
-                "temp_test_image.jpg",
-                mean_face,
-                eigenfaces,
-                projected_train,
-                X,
-                labels,
-                threshold=threshold,
-                show_plots=False
-            )
-
-            # Display results
-            if result:
-                st.markdown(f"""
-                <div class="success-box">
-                <h3>🎉 MATCH FOUND!</h3>
-                <p><strong>👤 Identified as:</strong> {result}</p>
-                <p><strong>📏 Distance:</strong> {distance:.2f}</p>
-                <p><strong>🎯 Confidence:</strong> {"High" if distance < 10 else "Medium" if distance < 15 else "Low"}</p>
-                </div>
-                """, unsafe_allow_html=True)
-
-                # Show top matches
-                st.markdown("### 🏆 Top 3 Matches:")
-                for i, (dist, label, idx) in enumerate(top_matches[:3]):
-                    confidence = "🟢 High" if dist < 10 else "🟡 Medium" if dist < 15 else "🔴 Low"
-                    st.markdown(f"**{i+1}.** {label} - Distance: {dist:.2f} {confidence}")
-
-            else:
-                st.markdown(f"""
-                <div class="error-box">
-                <h3>😞 NO MATCH FOUND</h3>
-                <p><strong>📏 Minimum Distance:</strong> {distance:.2f}</p>
-                <p><strong>🎯 Threshold:</strong> {threshold:.2f}</p>
-                <p>💡 Try adjusting the threshold or use a different image</p>
-                </div>
-                """, unsafe_allow_html=True)
-
-                # Show closest matches anyway
-                st.markdown("### 🔍 Closest Matches (for reference):")
-                for i, (dist, label, idx) in enumerate(top_matches[:3]):
-                    st.markdown(f"**{i+1}.** {label} - Distance: {dist:.2f}")
-
-        # Cleanup
-        if os.path.exists("temp_test_image.jpg"):
-            os.remove("temp_test_image.jpg")
-
-    except Exception as e:
-        st.error(f"❌ Error during recognition: {str(e)}")
-        # Cleanup on error
-        if os.path.exists("temp_test_image.jpg"):
-            os.remove("temp_test_image.jpg")
-
-def display_distance_analysis(uploaded_file, threshold=15.0):
-    """Display distance analysis and visualization"""
-    if not st.session_state.model_loaded or uploaded_file is None:
-        return
-
-    # Save uploaded file temporarily
-    with open("temp_test_image.jpg", "wb") as f:
-        f.write(uploaded_file.getbuffer())
-
-    try:
-        # Get model data
-        mean_face, eigenfaces, projected_train, eigenvalues, X, labels = st.session_state.model_data
-
-        # Perform recognition to get distances
-        result, distance, top_matches = recognize_face(
-            "temp_test_image.jpg",
-            mean_face,
-            eigenfaces,
-            projected_train,
-            X,
-            labels,
-            threshold=threshold,
-            show_plots=False
-        )
-
-        # Extract all distances
-        distances = [match[0] for match in top_matches]
-
-        # Create distance histogram
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.hist(distances, bins=20, alpha=0.7, color='#8b5a96', edgecolor='#e6d7ff')
-        ax.axvline(x=distance, color='#ff4444', linestyle='--', linewidth=2,
-                  label=f'Best Match: {distance:.2f}')
-        ax.axvline(x=threshold, color='#44ff44', linestyle='--', linewidth=2,
-                  label=f'Threshold: {threshold:.2f}')
-
-        ax.set_xlabel('Euclidean Distance', color='#e6d7ff')
-        ax.set_ylabel('Frequency', color='#e6d7ff')
-        ax.set_title('Distance Distribution Analysis', color='#e6d7ff', fontsize=14, fontweight='bold')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-
-        # Style the plot for dark theme
-        ax.set_facecolor('#1a0d2e')
-        fig.patch.set_facecolor('#1a0d2e')
-        ax.tick_params(colors='#e6d7ff')
-        ax.spines['bottom'].set_color('#e6d7ff')
-        ax.spines['top'].set_color('#e6d7ff')
-        ax.spines['right'].set_color('#e6d7ff')
-        ax.spines['left'].set_color('#e6d7ff')
-
-        st.pyplot(fig)
-        plt.close(fig)
-
-        # Distance statistics
-        st.markdown("### 📊 Distance Statistics")
-        col1, col2, col3, col4 = st.columns(4)
-
-        with col1:
-            st.metric("Minimum Distance", f"{min(distances):.2f}")
-        with col2:
-            st.metric("Average Distance", f"{np.mean(distances):.2f}")
-        with col3:
-            st.metric("Maximum Distance", f"{max(distances):.2f}")
-        with col4:
-            st.metric("Standard Deviation", f"{np.std(distances):.2f}")
-
-        # Cleanup
-        if os.path.exists("temp_test_image.jpg"):
-            os.remove("temp_test_image.jpg")
-
-    except Exception as e:
-        st.error(f"❌ Error in distance analysis: {str(e)}")
-        if os.path.exists("temp_test_image.jpg"):
-            os.remove("temp_test_image.jpg")
+    st.info("💡 Make sure FaceRec.py is in the same directory!")
 
 def main():
-    # Load custom CSS
-    load_css()
+    # Header
+    st.title("🎭 Face Recognition System")
+    st.markdown("---")
 
-    # Display header
-    display_header()
+    # Sidebar for model loading
+    with st.sidebar:
+        st.header("🔧 Model Settings")
 
-    # Display disclaimer
-    display_disclaimer()
+        # Load model
+        if st.button("📥 Load Trained Model"):
+            with st.spinner("Loading model..."):
+                try:
+                    # Load your saved model
+                    mean_face, eigenfaces, projected_train, eigenvalues, X, labels = load_model('saved_models')
 
-    # Sidebar controls
-    st.sidebar.markdown("## 🎛️ Control Panel")
+                    if mean_face is not None:
+                        # Store in session state
+                        st.session_state.model_loaded = True
+                        st.session_state.mean_face = mean_face
+                        st.session_state.eigenfaces = eigenfaces
+                        st.session_state.projected_train = projected_train
+                        st.session_state.eigenvalues = eigenvalues
+                        st.session_state.X = X
+                        st.session_state.labels = labels
 
-    # Model loading
-    if st.sidebar.button("🚀 Load Model", type="primary"):
-        if load_and_cache_model():
-            st.rerun()
+                        st.success("✅ Model loaded successfully!")
+                        st.info(f"📊 Training data: {len(set(labels))} people")
+                    else:
+                        st.error("❌ Failed to load model!")
 
-    # Check if model is loaded
-    model_loaded = load_and_cache_model()
+                except Exception as e:
+                    st.error(f"❌ Error loading model: {e}")
 
-    if not model_loaded:
-        st.warning("⚠️ Please load the model first using the sidebar button!")
-        return
+    # Main content
+    col1, col2 = st.columns([1, 1])
 
-    # Threshold adjustment
-    st.sidebar.markdown("### ⚙️ Settings")
-    threshold = st.sidebar.slider(
-        "🎯 Recognition Threshold",
-        min_value=5.0,
-        max_value=30.0,
-        value=15.0,
-        step=0.5,
-        help="Lower values = stricter matching"
-    )
+    with col1:
+        st.header("📁 Dataset Selection")
 
-    # File upload
-    st.markdown("### 📁 Upload Test Image")
-    uploaded_file = st.file_uploader(
-        "Choose an image file",
-        type=['jpg', 'jpeg', 'png', 'bmp'],
-        help="Upload a clear face image for recognition"
-    )
+        # Dataset folder (for display purposes)
+        dataset_path = st.selectbox(
+            "Select Dataset Folder:",
+            ["dataset_subset", "custom_dataset"],
+            index=0
+        )
 
-    if uploaded_file is not None:
-        # Display image and get column for results
-        result_col = display_test_image(uploaded_file)
+        if os.path.exists(dataset_path):
+            st.success(f"✅ Dataset found: {dataset_path}")
 
-        # Recognition button and results
-        if result_col:
-            with result_col:
-                st.markdown("### 🔍 Recognition Results")
+            # Show dataset info
+            try:
+                persons = os.listdir(dataset_path)
+                persons = [p for p in persons if os.path.isdir(os.path.join(dataset_path, p))]
+                st.info(f"👥 Found {len(persons)} people in dataset")
 
-                if st.button("🎯 Recognize Face", type="primary"):
-                    perform_recognition(uploaded_file, threshold)
+                # Show person names
+                with st.expander("👀 View People in Dataset"):
+                    for person in sorted(persons):
+                        person_path = os.path.join(dataset_path, person)
+                        img_count = len([f for f in os.listdir(person_path)
+                                       if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
+                        st.write(f"• {person}: {img_count} images")
 
-                # Advanced analysis
-                if st.button("📊 Show Distance Analysis"):
-                    st.markdown("### 📈 Distance Analysis")
-                    display_distance_analysis(uploaded_file, threshold)
+            except Exception as e:
+                st.warning(f"⚠️ Could not read dataset: {e}")
+        else:
+            st.error(f"❌ Dataset not found: {dataset_path}")
+
+    with col2:
+        st.header("🖼️ Test Image")
+
+        # File upload
+        uploaded_file = st.file_uploader(
+            "Choose a test image...",
+            type=['jpg', 'jpeg', 'png'],
+            accept_multiple_files=False
+        )
+
+        # OR select from test_img folder
+        st.write("**OR select from test folder:**")
+        test_folder = "test_img"
+
+        if os.path.exists(test_folder):
+            test_images = [f for f in os.listdir(test_folder)
+                          if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+
+            if test_images:
+                selected_test = st.selectbox(
+                    "Select test image:",
+                    ["None"] + sorted(test_images)
+                )
+
+                if selected_test != "None":
+                    test_image_path = os.path.join(test_folder, selected_test)
+
+                    # Display the test image
+                    try:
+                        test_img = Image.open(test_image_path)
+                        st.image(test_img, caption=f"Test Image: {selected_test}", width=300)
+
+                        # Recognition button
+                        if st.button("🔍 Recognize Face", type="primary"):
+                            if hasattr(st.session_state, 'model_loaded') and st.session_state.model_loaded:
+
+                                with st.spinner("Recognizing face..."):
+                                    try:
+                                        # Set threshold
+                                        threshold = st.sidebar.slider("🎯 Recognition Threshold", 5.0, 30.0, 15.0, 0.5)
+
+                                        # Perform recognition
+                                        result, distance, top_matches = quick_recognize(
+                                            test_image_path,
+                                            st.session_state.mean_face,
+                                            st.session_state.eigenfaces,
+                                            st.session_state.projected_train,
+                                            st.session_state.X,
+                                            st.session_state.labels,
+                                            threshold=threshold
+                                        )
+
+                                        # Display results
+                                        st.markdown("---")
+                                        st.header("🎯 Recognition Results")
+
+                                        if result:
+                                            st.success(f"✅ **MATCH FOUND!**")
+                                            st.write(f"👤 **Identified as:** {result}")
+                                            st.write(f"📏 **Distance:** {distance:.2f}")
+
+                                            # Show matched image from dataset
+                                            try:
+                                                # Find the matched image in dataset
+                                                matched_idx = None
+                                                for i, label in enumerate(st.session_state.labels):
+                                                    if label == result:
+                                                        matched_idx = i
+                                                        break
+
+                                                if matched_idx is not None:
+                                                    matched_img_vec = st.session_state.X[:, matched_idx]
+                                                    matched_img = matched_img_vec.reshape(100, 100)
+
+                                                    st.write("**Matched image from dataset:**")
+                                                    fig, ax = plt.subplots(figsize=(4, 4))
+                                                    ax.imshow(matched_img, cmap='gray')
+                                                    ax.set_title(f"Match: {result}")
+                                                    ax.axis('off')
+                                                    st.pyplot(fig)
+
+                                            except Exception as e:
+                                                st.warning(f"Could not display matched image: {e}")
+
+                                        else:
+                                            st.error(f"❌ **NO MATCH FOUND**")
+                                            st.write(f"📏 **Minimum distance:** {distance:.2f}")
+                                            st.write(f"🎯 **Threshold:** {threshold:.2f}")
+                                            st.info("💡 Try adjusting the threshold or use a clearer image")
+
+                                        # Show top 3 matches
+                                        if top_matches:
+                                            st.write("**🏆 Top 3 closest matches:**")
+                                            for i, (dist, label, idx) in enumerate(top_matches):
+                                                st.write(f"{i+1}. {label} (distance: {dist:.2f})")
+
+                                    except Exception as e:
+                                        st.error(f"❌ Recognition error: {e}")
+
+                            else:
+                                st.warning("⚠️ Please load the model first!")
+
+                    except Exception as e:
+                        st.error(f"❌ Error loading test image: {e}")
+
+            else:
+                st.warning(f"⚠️ No images found in {test_folder}")
+
+        else:
+            st.warning(f"⚠️ Test folder not found: {test_folder}")
+
+        # Handle uploaded file
+        if uploaded_file is not None:
+            st.write("**Uploaded image:**")
+            uploaded_img = Image.open(uploaded_file)
+            st.image(uploaded_img, caption="Uploaded Test Image", width=300)
+
+            # Save uploaded file temporarily
+            temp_path = f"temp_{uploaded_file.name}"
+            with open(temp_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+
+            # Recognition button for uploaded image
+            if st.button("🔍 Recognize Uploaded Face", type="primary"):
+                if hasattr(st.session_state, 'model_loaded') and st.session_state.model_loaded:
+
+                    with st.spinner("Recognizing uploaded face..."):
+                        try:
+                            threshold = st.sidebar.slider("🎯 Recognition Threshold", 5.0, 30.0, 15.0, 0.5)
+
+                            result, distance, top_matches = quick_recognize(
+                                temp_path,
+                                st.session_state.mean_face,
+                                st.session_state.eigenfaces,
+                                st.session_state.projected_train,
+                                st.session_state.X,
+                                st.session_state.labels,
+                                threshold=threshold
+                            )
+
+                            # Display results (same as above)
+                            st.markdown("---")
+                            st.header("🎯 Recognition Results")
+
+                            if result:
+                                st.success(f"✅ **MATCH FOUND!**")
+                                st.write(f"👤 **Identified as:** {result}")
+                                st.write(f"📏 **Distance:** {distance:.2f}")
+                            else:
+                                st.error(f"❌ **NO MATCH FOUND**")
+                                st.write(f"📏 **Minimum distance:** {distance:.2f}")
+                                st.write(f"🎯 **Threshold:** {threshold:.2f}")
+
+                            # Cleanup
+                            if os.path.exists(temp_path):
+                                os.remove(temp_path)
+
+                        except Exception as e:
+                            st.error(f"❌ Recognition error: {e}")
+                            if os.path.exists(temp_path):
+                                os.remove(temp_path)
+
+                else:
+                    st.warning("⚠️ Please load the model first!")
 
     # Footer
     st.markdown("---")
-    st.markdown("""
-    <div style='text-align: center; color: #8b5a96; font-style: italic;'>
-    🎭 Face Recognition System | Eigenfaces & Linear Algebra Project<br>
-    Built with ❤️ using Streamlit & Custom Eigenface Implementation
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("🎓 **Face Recognition System** - Aljabar Linear Project")
+    st.markdown("📚 Universitas Sebelas Maret - Teknik Informatika")
 
 if __name__ == "__main__":
+    # Initialize session state
+    if 'model_loaded' not in st.session_state:
+        st.session_state.model_loaded = False
+
     main()
