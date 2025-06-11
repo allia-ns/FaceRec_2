@@ -1,3 +1,6 @@
+# force safe Python version
+python_version == "3.10"
+
 streamlit
 numpy
 matplotlib
