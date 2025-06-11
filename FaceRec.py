@@ -497,33 +497,3 @@ def visualize_results(mean_face, eigenfaces, eigenvalues):
     plt.ylabel('Eigenvalue')
     plt.grid(True)
     plt.show()
-
-# ===== CONTOH PENGGUNAAN =====
-
-if __name__ == "__main__":
-    # Contoh penggunaan lengkap
-
-    # 1. Training (jalankan sekali saja)
-    # mean_face, eigenfaces, projected_train, eigenvalues, X, labels = train_eigenface_model('dataset_subset', k_eigenfaces=25)
-    # save_model(mean_face, eigenfaces, projected_train, eigenvalues, X, labels)
-
-    # 2. Load model yang sudah ditraining (untuk penggunaan selanjutnya)
-    mean_face, eigenfaces, projected_train, eigenvalues, X, labels = load_model()
-
-    if mean_face is not None:
-        print("\n🎉 Model berhasil dimuat! Siap untuk testing!")
-
-        # Visualisasi hasil
-        # visualize_results(mean_face, eigenfaces, eigenvalues)
-
-        # Test dengan gambar
-        test_image = "test_img/sample_test.jpg"  # Ganti dengan path gambar test
-        result, distance, top_matches = recognize_face(test_image, mean_face, eigenfaces, projected_train, X, labels)
-
-        if result:
-            print(f"\n👤 Teridentifikasi sebagai: {result}")
-            print(f"📏 Jarak: {distance:.2f}")
-        else:
-            print(f"\n😞 Tidak ada kecocokan ditemukan")
-    else:
-        print("❌ Gagal memuat model. Jalankan training terlebih dahulu!")

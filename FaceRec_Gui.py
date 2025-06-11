@@ -7,6 +7,8 @@ Original file is located at
     https://colab.research.google.com/drive/161qDTvXtbsxSod2WIIXgLczJBSDCXIQI
 """
 
+# -*- coding: utf-8 -*-
+
 import streamlit as st
 
 # THIS MUST BE THE ABSOLUTE FIRST STREAMLIT COMMAND!
@@ -23,18 +25,46 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import os
 
-# Import your face recognition module
-try:
-    from FaceRec import load_model, recognize_face, quick_recognize
-    st.success("✅ FaceRec module loaded successfully!")
-except ImportError as e:
-    st.error(f"❌ Error importing FaceRec: {e}")
-    st.info("💡 Make sure FaceRec.py is in the same directory!")
+# Import your face recognition module with error handling
+face_rec_available = False
+face_rec_error = ""
+
+def safe_import_facerec():
+    """Import FaceRec functions safely"""
+    global face_rec_available, face_rec_error, load_model, recognize_face, quick_recognize
+
+    try:
+        from FaceRec import load_model, recognize_face, quick_recognize
+        face_rec_available = True
+        return True
+    except Exception as e:
+        face_rec_error = str(e)
+        face_rec_available = False
+        return False
+
+def show_import_status():
+    """Show the import status after page config is set"""
+    # Try to import here, after streamlit is properly initialized
+    if not face_rec_available:
+        safe_import_facerec()
+
+    if face_rec_available:
+        st.success("✅ FaceRec module loaded successfully!")
+    else:
+        st.error(f"❌ Error importing FaceRec: {face_rec_error}")
+        st.info("💡 Make sure FaceRec.py is in the same directory!")
 
 def main():
     # Header
     st.title("🎭 Face Recognition System")
     st.markdown("---")
+
+    # Show import status
+    show_import_status()
+
+    # Only proceed if FaceRec is available
+    if not face_rec_available:
+        st.stop()
 
     # Sidebar for model loading
     with st.sidebar:
